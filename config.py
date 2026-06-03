@@ -1,8 +1,16 @@
+import os
+
 VICUNA_PATH = ".../project/vicuna-13b-v1.5/" # ADD PATH
 LLAMA_PATH = ".../project/Llama-2-7b-chat-hf" # ADD PATH
 
 VICUNA_API_LINK ="https://..." # ADD LINK
 LLAMA_API_LINK = "https://..." # ADD LINK
+
+# OpenAI-compatible self-hosted chat completion API.
+# CUSTOM_API_URL accepts either a full /chat/completions endpoint or a /v1 base URL.
+CUSTOM_API_URL = os.getenv("CUSTOM_API_URL", "")
+CUSTOM_API_TOKEN = os.getenv("CUSTOM_API_TOKEN", "")
+CUSTOM_MODEL_NAME = os.getenv("CUSTOM_MODEL_NAME", "")
 
 
 ATTACK_TEMP = 1

@@ -6,10 +6,10 @@ from fastchat.model import (
 
 from system_prompts import get_evaluator_system_prompt_for_judge, get_evaluator_system_prompt_for_on_topic
 
-from language_models import GPT
+from language_models import GPT, CustomChatAPI
 
 def load_evaluator(args):
-    if "gpt" in args.evaluator_model:
+    if "gpt" in args.evaluator_model or args.evaluator_model == "custom-api-model":
         return GPTEvaluator(args)
     elif args.evaluator_model == "no-evaluator":
         return NoEvaluator(args)
@@ -76,13 +76,18 @@ class NoEvaluator(EvaluatorBase):
 class GPTEvaluator(EvaluatorBase):
     def __init__(self, args):
         super(GPTEvaluator, self).__init__(args)
-        self.evaluator_model = GPT(model_name = self.evaluator_name)
+        if self.evaluator_name == "custom-api-model":
+            self.evaluator_model = CustomChatAPI(model_name = self.evaluator_name)
+            self.template_name = "gpt-3.5-turbo"
+        else:
+            self.evaluator_model = GPT(model_name = self.evaluator_name)
+            self.template_name = self.evaluator_name
 
     def create_conv(self, full_prompt, system_prompt=None):
         if system_prompt is None:
             system_prompt = self.system_prompt
         
-        conv = get_conversation_template(self.evaluator_name)
+        conv = get_conversation_template(self.template_name)
         conv.set_system_message(system_prompt)
         conv.append_message(conv.roles[0], full_prompt)
         
