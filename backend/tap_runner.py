@@ -72,10 +72,57 @@ class JobManager:
             except Exception:
                 continue
             if meta.get("status") in RUNNING_STATUSES:
-                meta["status"] = "stale"
-                meta["finished_at"] = _now()
-                meta["error"] = "Backend restarted before this job finished."
-                self._write_meta(meta)
+                pid = meta.get("pid")
+                if pid and self._pid_is_alive(int(pid)):
+                    thread = threading.Thread(target=self._watch_orphaned_process, args=(meta["id"], int(pid)), daemon=True)
+                    thread.start()
+                    self._append_log(meta["id"], f"\n[{_now()}] backend attached lightweight monitor to existing pid={pid}\n")
+                else:
+                    result_file = Path(meta.get("result_file", ""))
+                    meta["status"] = "succeeded" if result_file.exists() else "stale"
+                    meta["finished_at"] = _now()
+                    if meta["status"] == "stale":
+                        meta["error"] = "Backend restarted before this job finished, and the TAP process is no longer running."
+                    self._write_meta(meta)
+
+    def _pid_is_alive(self, pid: int) -> bool:
+        if pid <= 0:
+            return False
+        if os.name == "nt":
+            try:
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                return str(pid) in result.stdout
+            except Exception:
+                return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+    def _watch_orphaned_process(self, job_id: str, pid: int) -> None:
+        while self._pid_is_alive(pid):
+            time.sleep(2)
+        with self._lock:
+            try:
+                meta = self._read_meta(job_id)
+            except KeyError:
+                return
+            if meta.get("status") not in RUNNING_STATUSES:
+                return
+            result_file = Path(meta.get("result_file", ""))
+            meta["status"] = "succeeded" if result_file.exists() else "failed"
+            meta["finished_at"] = _now()
+            meta["exit_code"] = None
+            if meta["status"] == "failed":
+                meta["error"] = "TAP process ended after backend monitor re-attached, but no result file was produced."
+            self._write_meta(meta)
+        self._append_log(job_id, f"\n[{_now()}] monitored pid={pid} ended; status={meta['status']}\n")
 
     def _build_command(self, config: Dict[str, Any], iter_index: int, result_dir: Path) -> List[str]:
         command = [
