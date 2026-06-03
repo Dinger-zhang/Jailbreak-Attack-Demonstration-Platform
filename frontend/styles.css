@@ -170,6 +170,11 @@ h1 {
   min-width: 0;
 }
 
+.monitor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -418,8 +423,8 @@ button:disabled {
 }
 
 .log-box {
+  flex: 1 1 360px;
   min-height: 360px;
-  max-height: 520px;
   overflow: auto;
   border-radius: 20px;
   margin: 0;
