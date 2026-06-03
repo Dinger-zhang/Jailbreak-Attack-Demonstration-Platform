@@ -9,12 +9,24 @@ from os.path import isfile, join
 
 import common 
 
+TAP_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_STORE_FOLDER = os.path.join(TAP_DIR, "runs")
+
+def resolve_tap_path(path):
+    if not path:
+        return DEFAULT_STORE_FOLDER
+    if os.path.isabs(path):
+        return path
+    return os.path.join(TAP_DIR, path)
+
 class WandBLogger:
     """WandB logger."""
 
     def __init__(self, args, system_prompt):
+        os.makedirs(TAP_DIR, exist_ok=True)
         self.logger = wandb.init(
             project = "jailbreak-llms",
+            dir = TAP_DIR,
             config = {
                 "attack_model" : args.attack_model,
                 "target_model" : args.target_model,
@@ -116,7 +128,8 @@ class WandBLogger:
             max_score = df['judge_scores'].max()
             print(f"Max Score: {max_score}")
 
-        os.makedirs(common.STORE_FOLDER, exist_ok=True)
-        output_path = os.path.join(common.STORE_FOLDER, f'iter_{common.ITER_INDEX}_df')
+        store_folder = resolve_tap_path(common.STORE_FOLDER)
+        os.makedirs(store_folder, exist_ok=True)
+        output_path = os.path.join(store_folder, f'iter_{common.ITER_INDEX}_df')
         self.table.to_parquet(output_path)
 
