@@ -167,6 +167,7 @@ h1 {
 .monitor-panel,
 .results-panel {
   grid-column: span 1;
+  min-width: 0;
 }
 
 .section-heading {
@@ -337,6 +338,11 @@ button:disabled {
   background: rgba(255, 252, 245, 0.68);
 }
 
+.result-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .row-card {
   cursor: pointer;
   transition: transform 140ms ease, border-color 140ms ease;
@@ -365,6 +371,7 @@ button:disabled {
   margin: 0;
   color: #394539;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .job-strip {
@@ -432,6 +439,8 @@ button:disabled {
   padding: 18px;
   background: rgba(0, 140, 114, 0.09);
   line-height: 1.65;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .result-summary.empty {
@@ -448,13 +457,16 @@ button:disabled {
   margin-top: 14px;
 }
 
+.result-summary pre,
 .result-card pre {
+  max-width: 100%;
   overflow: auto;
   margin: 10px 0 0;
   border-radius: 14px;
   padding: 12px;
   background: rgba(23, 32, 26, 0.06);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .health-grid {
