@@ -4,12 +4,19 @@ import os
 import time
 import torch
 import gc
+import json as json_lib
 from typing import Dict, List
 import google.generativeai as genai
 import urllib3
 from copy import deepcopy
 
-from config import LLAMA_API_LINK, VICUNA_API_LINK
+from config import (
+    CUSTOM_API_TOKEN,
+    CUSTOM_API_URL,
+    CUSTOM_MODEL_NAME,
+    LLAMA_API_LINK,
+    VICUNA_API_LINK,
+)
 
     
 class LanguageModel():
@@ -195,6 +202,98 @@ class APIModelLlama7B(APIModel):
 class APIModelVicuna13B(APIModel): 
     API_HOST_LINK = VICUNA_API_LINK 
     MODEL_API_KEY = os.getenv("VICUNA_API_KEY")
+
+
+class CustomChatAPI(LanguageModel):
+    API_RETRY_SLEEP = 10
+    API_ERROR_OUTPUT = "$ERROR$"
+    API_QUERY_SLEEP = 0.5
+    API_MAX_RETRY = 20
+    API_TIMEOUT = 100
+
+    def __init__(self, model_name):
+        self.model_name = model_name
+        self.api_url = self._normalize_chat_url(CUSTOM_API_URL)
+        self.api_token = CUSTOM_API_TOKEN
+        self.backend_model_name = CUSTOM_MODEL_NAME
+        if not self.api_url:
+            raise ValueError("CUSTOM_API_URL is required for custom-api-model.")
+        if not self.backend_model_name:
+            raise ValueError("CUSTOM_MODEL_NAME is required for custom-api-model.")
+
+    def _normalize_chat_url(self, api_url):
+        api_url = api_url.strip().rstrip("/")
+        if not api_url:
+            return ""
+        if api_url.endswith("/chat/completions"):
+            return api_url
+        if api_url.endswith("/v1"):
+            return f"{api_url}/chat/completions"
+        return api_url
+
+    def _headers(self):
+        headers = {"Content-Type": "application/json"}
+        if self.api_token:
+            headers["Authorization"] = f"Bearer {self.api_token}"
+        return headers
+
+    def _extract_output(self, resp_json):
+        if "choices" in resp_json and resp_json["choices"]:
+            choice = resp_json["choices"][0]
+            if "message" in choice and isinstance(choice["message"], dict):
+                return choice["message"].get("content", "")
+            if "text" in choice:
+                return choice["text"]
+
+        for key in ("output", "content", "response", "text"):
+            if key in resp_json:
+                output = resp_json[key]
+                if isinstance(output, list):
+                    return output[0] if output else ""
+                return output
+
+        raise ValueError(f"Unsupported custom API response: {json_lib.dumps(resp_json)[:500]}")
+
+    def generate(self, conv: List[Dict],
+                max_n_tokens: int,
+                temperature: float,
+                top_p: float):
+        output = self.API_ERROR_OUTPUT
+        payload = {
+            "model": self.backend_model_name,
+            "messages": conv,
+            "max_tokens": max_n_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+
+        for _ in range(self.API_MAX_RETRY):
+            try:
+                resp = urllib3.request(
+                    "POST",
+                    self.api_url,
+                    headers=self._headers(),
+                    timeout=urllib3.Timeout(self.API_TIMEOUT),
+                    json=payload,
+                )
+                resp_json = resp.json()
+                if resp.status >= 400:
+                    raise RuntimeError(f"HTTP {resp.status}: {json_lib.dumps(resp_json)[:500]}")
+                output = self._extract_output(resp_json)
+                break
+            except Exception as e:
+                print("custom API exception!", type(e), e)
+                time.sleep(self.API_RETRY_SLEEP)
+
+            time.sleep(self.API_QUERY_SLEEP)
+        return output
+
+    def batched_generate(self,
+                        convs_list: List[List[Dict]],
+                        max_n_tokens: int,
+                        temperature: float,
+                        top_p: float = 1.0,):
+        return [self.generate(conv, max_n_tokens, temperature, top_p) for conv in convs_list]
 
 class GPT(LanguageModel):
     API_RETRY_SLEEP = 10

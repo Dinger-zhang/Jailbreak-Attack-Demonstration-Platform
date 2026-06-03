@@ -1,9 +1,20 @@
 
 import common
-from language_models import GPT, PaLM, HuggingFace, APIModelLlama7B, APIModelVicuna13B, GeminiPro
+from language_models import GPT, PaLM, HuggingFace, APIModelLlama7B, APIModelVicuna13B, GeminiPro, CustomChatAPI
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config import VICUNA_PATH, LLAMA_PATH, ATTACK_TEMP, TARGET_TEMP, ATTACK_TOP_P, TARGET_TOP_P, MAX_PARALLEL_STREAMS 
+
+CHAT_API_MODELS = {
+    "gpt-3.5-turbo",
+    "gpt-4",
+    "gpt-4-turbo",
+    "gpt-4-1106-preview",
+    "custom-api-model",
+}
+
+def uses_chat_api(model_name):
+    return model_name in CHAT_API_MODELS
 
 def load_target_model(args):
     target_llm = TargetLLM(model_name = args.target_model, 
@@ -88,7 +99,7 @@ class AttackLLM():
         for conv, prompt in zip(convs_list, prompts_list):
             conv.append_message(conv.roles[0], prompt)
             # Get prompts
-            if "gpt" in self.model_name:
+            if uses_chat_api(self.model_name):
                 full_prompts.append(conv.to_openai_api_messages())
             else:
                 conv.append_message(conv.roles[1], init_message)
@@ -123,7 +134,7 @@ class AttackLLM():
             for i, full_output in enumerate(outputs_list):
                 orig_index = indices_to_regenerate[i]
                 
-                if "gpt" not in self.model_name:
+                if not uses_chat_api(self.model_name):
                     full_output = init_message + full_output
 
                 attack_dict, json_str = common.extract_json(full_output)
@@ -176,7 +187,7 @@ class TargetLLM():
         full_prompts = []
         for conv, prompt in zip(convs_list, prompts_list):
             conv.append_message(conv.roles[0], prompt)
-            if "gpt" in self.model_name:
+            if uses_chat_api(self.model_name):
                 # OpenAI does not have separators
                 full_prompts.append(conv.to_openai_api_messages())
             elif "palm" in self.model_name:
@@ -212,8 +223,10 @@ def load_indiv_model(model_name):
     
     common.MODEL_NAME = model_name
     
-    if model_name in ["gpt-3.5-turbo", "gpt-4", 'gpt-4-1106-preview']:
+    if model_name in ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4-1106-preview"]:
         lm = GPT(model_name)
+    elif model_name == "custom-api-model":
+        lm = CustomChatAPI(model_name)
     elif model_name == "palm-2":
         lm = PaLM(model_name)
     elif model_name == "gemini-pro":
@@ -264,6 +277,10 @@ def get_model_path_and_template(model_name):
         "gpt-3.5-turbo": {
             "path": "gpt-3.5-turbo",
             "template":"gpt-3.5-turbo"
+        },
+        "custom-api-model": {
+            "path": None,
+            "template": "gpt-3.5-turbo"
         },
         "vicuna":{
             "path": VICUNA_PATH,
