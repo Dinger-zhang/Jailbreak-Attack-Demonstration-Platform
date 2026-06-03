@@ -116,4 +116,7 @@ class WandBLogger:
             max_score = df['judge_scores'].max()
             print(f"Max Score: {max_score}")
 
-        self.table.to_parquet(common.STORE_FOLDER + '/' + f'iter_{common.ITER_INDEX}_df')
+        os.makedirs(common.STORE_FOLDER, exist_ok=True)
+        output_path = os.path.join(common.STORE_FOLDER, f'iter_{common.ITER_INDEX}_df')
+        self.table.to_parquet(output_path)
+
