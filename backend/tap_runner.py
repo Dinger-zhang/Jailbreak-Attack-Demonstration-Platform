@@ -1,4 +1,5 @@
 import json
+import locale
 import math
 import os
 import subprocess
@@ -18,6 +19,21 @@ RUNNING_STATUSES = {"queued", "running", "cancelling"}
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _decode_process_output(data: bytes) -> str:
+    preferred = locale.getpreferredencoding(False)
+    encodings = ["utf-8", "utf-8-sig", preferred, "mbcs", "gbk", "cp936"]
+    tried = set()
+    for encoding in encodings:
+        if not encoding or encoding in tried:
+            continue
+        tried.add(encoding)
+        try:
+            return data.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 def _clean_for_json(value: Any) -> Any:
@@ -173,6 +189,9 @@ class JobManager:
         env = os.environ.copy()
         env.setdefault("WANDB_MODE", "offline")
         env.setdefault("WANDB_SILENT", "true")
+        env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+        env.setdefault("PYTHONUNBUFFERED", "1")
 
         if config.get("custom_api_url"):
             env["CUSTOM_API_URL"] = config["custom_api_url"]
@@ -233,10 +252,7 @@ class JobManager:
                 env=self._subprocess_env(config),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
+                bufsize=0,
                 creationflags=creationflags,
             )
         except Exception as exc:
@@ -264,7 +280,7 @@ class JobManager:
         try:
             if process.stdout is not None:
                 for line in process.stdout:
-                    self._append_log(job_id, line)
+                    self._append_log(job_id, _decode_process_output(line))
             exit_code = process.wait()
             with self._lock:
                 meta = self._read_meta(job_id)
